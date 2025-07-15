@@ -94,28 +94,30 @@ export default function PracticePage() {
 
 // In app/practice/page.tsx, inside the PracticePage component
 
-const handleShowScore = async () => {
-  const correctCount = questions.reduce((acc, q) => (selectedAnswers[q.id] === q.correctAnswer ? acc + 1 : acc), 0);
-  const finalScore = questions.length > 0 ? (correctCount / questions.length) * 100 : 0;
-  setScore(finalScore);
-  setShowScore(true);
+// In app/practice/page.tsx
 
-  // --- NEW: Send results to the backend ---
-  try {
-    await fetch('http://127.0.0.1:5000/api/quiz/submit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        score: Math.round(finalScore),
-        totalQuestions: questions.length,
-      }),
-      credentials: 'include', // Important for sending the session cookie
-    });
-  } catch (error) {
-    console.error("Failed to save quiz score:", error);
-  }
-  // ------------------------------------
-};
+      const handleShowScore = async () => {
+        const correctCount = questions.reduce((acc, q) => (selectedAnswers[q.id] === q.correctAnswer ? acc + 1 : acc), 0);
+        const finalScore = questions.length > 0 ? (correctCount / questions.length) * 100 : 0;
+        setScore(finalScore);
+        setShowScore(true);
+  
+        // --- NEW: Send results to the backend ---
+        try {
+          await fetch('http://127.0.0.1:5000/api/quiz/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              score: Math.round(finalScore),
+              totalQuestions: questions.length,
+            }),
+            credentials: 'include', // Important for sending the session cookie
+          });
+        } catch (error) {
+          console.error("Failed to save quiz score:", error);
+        }
+        // ------------------------------------
+      };
 
   if (showScore) {
     return (
