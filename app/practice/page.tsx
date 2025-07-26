@@ -1,9 +1,8 @@
-// app/practice/page.tsx
-
-'use client'; // This page is interactive
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { Question } from '@/types';
 
 import { Button } from '@/components/ui/button';
@@ -13,27 +12,10 @@ import { Flag, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function PracticePage() {
+  const { data: session } = useSession();
   const searchParams = useSearchParams();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Fetch questions from the API based on URL parameters
-  useEffect(() => {
-    async function fetchQuestions() {
-      try {
-        // Pass the search params directly to the API
-        const res = await fetch(`http://127.0.0.1:5000/api/questions?${searchParams.toString()}`);
-        const data = await res.json();
-        setQuestions(data);
-      } catch (error) {
-        console.error("Failed to fetch questions:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    fetchQuestions();
-  }, [searchParams]);
-
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<{ [key: number]: string }>({});
   const [eliminatedOptions, setEliminatedOptions] = useState<{ [key: number]: string[] }>({});
@@ -42,22 +24,24 @@ export default function PracticePage() {
   const [score, setScore] = useState<number | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
 
-  if (isLoading) {
-    return <div className="text-center p-10">Loading Questions...</div>;
-  }
-
-  if (!isLoading && questions.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <Alert>
-          <AlertTitle>No Questions Found</AlertTitle>
-          <AlertDescription>
-            No questions match the selected filters. Please go back and try different selections.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
+  useEffect(() => {
+    async function fetchQuestions() {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/questions?${searchParams.toString()}`);
+        if (!res.ok) {
+          throw new Error('Failed to fetch questions');
+        }
+        const data = await res.json();
+        setQuestions(data);
+      } catch (error) {
+        console.error("Failed to fetch questions:", error);
+        toast.error("Could not load questions for the quiz.");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchQuestions();
+  }, [searchParams]);
 
   const currentQuestion = questions[currentQuestionIndex];
   const isCorrect = currentQuestion && selectedAnswers[currentQuestion.id] === currentQuestion.correctAnswer;
@@ -92,32 +76,69 @@ export default function PracticePage() {
     }
   };
 
-// In app/practice/page.tsx, inside the PracticePage component
+  const handleShowScore = async () => {
+    const correctCount = questions.reduce((acc, q) => (selectedAnswers[q.id] === q.correctAnswer ? acc + 1 : acc), 0);
+    const finalScore = questions.length > 0 ? (correctCount / questions.length) * 100 : 0;
+    setScore(finalScore);
+    setShowScore(true);
 
-// In app/practice/page.tsx
+    const categories = searchParams.get('categories');
+    const difficulties = searchParams.get('difficulties');
+    let testName = "Practice Quiz";
+    if (categories) {
+      testName = `${categories.replace(/,/g, ', ')} Quiz`;
+    } else if (difficulties) {
+      testName = `${difficulties.replace(/,/g, ', ')} Difficulty Quiz`;
+    }
 
-      const handleShowScore = async () => {
-        const correctCount = questions.reduce((acc, q) => (selectedAnswers[q.id] === q.correctAnswer ? acc + 1 : acc), 0);
-        const finalScore = questions.length > 0 ? (correctCount / questions.length) * 100 : 0;
-        setScore(finalScore);
-        setShowScore(true);
-  
-        // --- NEW: Send results to the backend ---
-        try {
-          await fetch('http://127.0.0.1:5000/api/quiz/submit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              score: Math.round(finalScore),
-              totalQuestions: questions.length,
-            }),
-            credentials: 'include', // Important for sending the session cookie
-          });
-        } catch (error) {
-          console.error("Failed to save quiz score:", error);
-        }
-        // ------------------------------------
-      };
+    // Check if the user is logged in and has a token
+    if (!session?.user?.backendToken) {
+      toast.error("You must be logged in to save your score.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/quiz/submit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Use the token from the session for authentication
+          'Authorization': `Bearer ${session.user.backendToken}`,
+        },
+        body: JSON.stringify({
+          score: Math.round(finalScore),
+          totalQuestions: questions.length,
+          testName: testName,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save score on the server.');
+      }
+
+      toast.success("Quiz score saved successfully!");
+    } catch (error) {
+      console.error("Failed to save quiz score:", error);
+      toast.error("Could not save your score.");
+    }
+  };
+
+  if (isLoading) {
+    return <div className="text-center p-10">Loading Questions...</div>;
+  }
+
+  if (!isLoading && questions.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Alert>
+          <AlertTitle>No Questions Found</AlertTitle>
+          <AlertDescription>
+            No questions match the selected filters. Please go back and try different selections.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   if (showScore) {
     return (

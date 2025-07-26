@@ -28,8 +28,7 @@ export default function StartQuizPage() {
   useEffect(() => {
     async function fetchConfig() {
       try {
-        const res = await fetch('http://127.0.0.1:5000/api/quiz-config');
-        const data = await res.json();
+const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/quiz-config`);        const data = await res.json();
         // Filter the categories from the API against our approved list
         setAllCategories(data.categories.filter((cat: string) => approvedCategories.includes(cat)));
         setAllDifficulties(data.difficulties);

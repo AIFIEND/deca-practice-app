@@ -1,15 +1,19 @@
-# backend/seed.py
+## backend/seed.py (Clean Version)
 
+import os
 import pandas as pd
 from app import app, db, Question
 
-# Load the questions from the CSV file
-df = pd.read_csv('questions.csv')
+# Build Absolute Path to CSV
+basedir = os.path.abspath(os.path.dirname(__file__))
+csv_path = os.path.join(basedir, 'questions.csv')
 
-# ---- NEW: Drop rows where any required column is empty ----
+# Load the questions from the CSV file
+df = pd.read_csv(csv_path)
+
+# Drop rows where any required column is empty
 required_columns = ['category', 'optionA', 'optionB', 'optionC', 'optionD']
 df.dropna(subset=required_columns, inplace=True)
-# ---------------------------------------------------------
 
 with app.app_context():
     # Clear existing data

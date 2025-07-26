@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -19,21 +20,27 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
-    const res = await fetch('http://127.0.0.1:5000/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-      // This is crucial for Flask-Login sessions to work
-      credentials: 'include', 
-    });
+    try {
+      // We only need the single NextAuth signIn call now.
+      // It handles calling our backend and setting up the session with the token.
+      const result = await signIn('credentials', {
+        redirect: false,
+        username: username,
+        password: password,
+      });
 
-    const data = await res.json();
-
-    if (res.ok) {
-      // Redirect to the quiz start page after successful login
-      router.push('/start-quiz');
-    } else {
-      setError(data.message || 'Failed to log in');
+      if (result?.error) {
+        setError('Invalid username or password.');
+        return;
+      }
+      
+      if (result?.ok) {
+        router.push('/dashboard');
+        router.refresh();
+      }
+    } catch (error) {
+      console.error('Login failed:', error);
+      setError('An unexpected error occurred.');
     }
   };
 
