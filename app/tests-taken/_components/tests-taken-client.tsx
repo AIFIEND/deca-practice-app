@@ -1,7 +1,6 @@
-// app/tests-taken/_components/tests-taken-client.tsx
-
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -11,23 +10,39 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-// Define a type for the test data for better type safety
 type Test = {
   _id: string;
   testName: string;
   score: number;
   totalQuestions: number;
   completedAt: string;
+  is_complete: boolean;        // ← add this field
 };
 
 interface TestsTakenClientProps {
   tests: Test[];
 }
 
+// Helper to parse and format the ISO timestamp
+function formatDate(isoString: string): string {
+  const str = isoString.endsWith("Z") ? isoString : `${isoString}Z`;
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
 export const TestsTakenClient = ({ tests }: TestsTakenClientProps) => {
+  const router = useRouter();
+
   if (tests.length === 0) {
     return (
-      <p className="text-muted-foreground">You have not taken any tests yet.</p>
+      <p className="text-muted-foreground">
+        You have not taken any tests yet.
+      </p>
     );
   }
 
@@ -38,13 +53,14 @@ export const TestsTakenClient = ({ tests }: TestsTakenClientProps) => {
           <CardHeader>
             <CardTitle>{test.testName}</CardTitle>
             <CardDescription>
-              Completed on: {new Date(test.completedAt).toLocaleDateString()}
+              Completed on: {formatDate(test.completedAt)}
             </CardDescription>
           </CardHeader>
+
           <CardContent className="flex-grow flex flex-col justify-end">
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Score</span>
-              <Badge 
+              <Badge
                 variant={test.score > 80 ? "default" : "secondary"}
                 className="text-lg"
               >
@@ -52,6 +68,16 @@ export const TestsTakenClient = ({ tests }: TestsTakenClientProps) => {
               </Badge>
             </div>
           </CardContent>
+
+          {/* Continue button for unfinished quizzes */}
+          {!test.is_complete && (
+            <button
+              className="mt-4 btn btn-primary"
+              onClick={() => router.push(`/quiz/${test._id}/resume`)}
+            >
+              Continue
+            </button>
+          )}
         </Card>
       ))}
     </div>
