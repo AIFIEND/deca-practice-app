@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 type Test = {
   _id: string;
@@ -16,7 +16,7 @@ type Test = {
   score: number;
   totalQuestions: number;
   completedAt: string;
-  is_complete: boolean;        // ← add this field
+  is_complete: boolean; // Field is used to show Continue button
 };
 
 interface TestsTakenClientProps {
@@ -25,9 +25,10 @@ interface TestsTakenClientProps {
 
 // Helper to parse and format the ISO timestamp
 function formatDate(isoString: string): string {
+  // Ensures 'Z' for UTC if missing, preventing local time conversion issues
   const str = isoString.endsWith("Z") ? isoString : `${isoString}Z`;
   const d = new Date(str);
-  if (isNaN(d.getTime())) return "—";
+  if (isNaN(d.getTime())) return "—"; // Return dash for invalid dates
   return d.toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
@@ -40,44 +41,45 @@ export const TestsTakenClient = ({ tests }: TestsTakenClientProps) => {
 
   if (tests.length === 0) {
     return (
-      <p className="text-muted-foreground">
-        You have not taken any tests yet.
-      </p>
+      <div className="text-center">
+        <h2 className="text-2xl font-semibold">No Tests Taken Yet</h2>
+        <p className="text-muted-foreground mt-2">
+          Start a new practice quiz to see your results here.
+        </p>
+        <Button onClick={() => router.push('/start-quiz')} className="mt-4">
+          Start a Quiz
+        </Button>
+      </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {tests.map((test) => (
-        <Card key={test._id} className="flex flex-col">
+        <Card key={test._id}>
           <CardHeader>
             <CardTitle>{test.testName}</CardTitle>
             <CardDescription>
-              Completed on: {formatDate(test.completedAt)}
+              Started on: {formatDate(test.completedAt)}
             </CardDescription>
           </CardHeader>
-
-          <CardContent className="flex-grow flex flex-col justify-end">
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">Score</span>
-              <Badge
-                variant={test.score > 80 ? "default" : "secondary"}
-                className="text-lg"
-              >
-                {test.score}%
-              </Badge>
-            </div>
+          <CardContent>
+            {test.is_complete ? (
+              <div>
+                <p className="font-semibold">Score: {test.score ?? 'N/A'}%</p>
+                <p className="text-sm text-muted-foreground">
+                  {test.totalQuestions} questions
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">In Progress...</p>
+                <Button onClick={() => router.push(`/practice?attemptId=${test._id}`)}>
+                  Continue
+                </Button>
+              </div>
+            )}
           </CardContent>
-
-          {/* Continue button for unfinished quizzes */}
-          {!test.is_complete && (
-            <button
-              className="mt-4 btn btn-primary"
-              onClick={() => router.push(`/quiz/${test._id}/resume`)}
-            >
-              Continue
-            </button>
-          )}
         </Card>
       ))}
     </div>

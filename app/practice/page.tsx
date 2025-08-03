@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Question } from "@/types";
-
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,8 +20,29 @@ import { toast } from "sonner";
 export default function PracticePage() {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
+  const router = useRouter();
 
-  // STATE
+ if (status === "loading") {
+    return <p className="text-center mt-8">Loading...</p>;
+  }
+
+  if (status === "unauthenticated") {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Card className="w-full max-w-md text-center">
+          <CardHeader>
+            <CardTitle>Access Denied</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p>You need to be logged in to view this page.</p>
+            <Button onClick={() => router.push("/login")}>
+              Go to Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   const [questions, setQuestions] = useState<Question[]>([]);
   const [attemptId, setAttemptId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,23 +58,51 @@ export default function PracticePage() {
   const [score, setScore] = useState<number | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
 
-  // FETCH /api/quiz/start on mount
-  useEffect(() => {
-    async function startQuiz() {
-      try {
-        // derive filters from URL
+// app/practice/page.tsx
+
+useEffect(() => {
+  const attemptIdFromUrl = searchParams.get("attemptId");
+
+  const loadQuiz = async () => {
+    setIsLoading(true);
+    try {
+      let data;
+      // If there's an attemptId in the URL, RESUME the quiz
+if (attemptIdFromUrl) {
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/api/quiz/resume/${attemptIdFromUrl}`,
+    {
+      headers: {
+        Authorization: `Bearer ${session?.user?.backendToken}`,
+      },
+    }
+  );
+  if (!res.ok) throw new Error("Failed to resume quiz");
+  
+  const data = await res.json();
+  const savedAnswers = data.answersSoFar || {};
+
+  // 1. Set all the state based on the resumed data
+  setAttemptId(parseInt(attemptIdFromUrl, 10));
+  setQuestions(data.questions);
+  setSelectedAnswers(savedAnswers);
+
+  // 2. Now, calculate where to start the user
+  const firstUnansweredIndex = data.questions.findIndex(
+    (q: Question) => !savedAnswers.hasOwnProperty(q.id)
+  );
+  
+  setCurrentQuestionIndex(
+    firstUnansweredIndex === -1 ? data.questions.length - 1 : firstUnansweredIndex
+  );
+}   
+      else {
         const cats = searchParams.get("categories")?.split(",") || [];
         const diffs = searchParams.get("difficulties")?.split(",") || [];
-
-        // build a testName for display
         let testName = "Practice Quiz";
-        if (cats.length) {
-          testName = `${cats.join(", ")} Quiz`;
-        } else if (diffs.length) {
-          testName = `${diffs.join(", ")} Difficulty Quiz`;
-        }
+        if (cats.length) testName = `${cats.join(", ")} Quiz`;
+        else if (diffs.length) testName = `${diffs.join(", ")} Difficulty Quiz`;
 
-        // call the start endpoint
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/quiz/start`,
           {
@@ -62,23 +111,30 @@ export default function PracticePage() {
               "Content-Type": "application/json",
               Authorization: `Bearer ${session?.user?.backendToken}`,
             },
-            body: JSON.stringify({ categories: cats, difficulties: diffs, testName }),
+            body: JSON.stringify({
+              categories: cats,
+              difficulties: diffs,
+              testName,
+            }),
           }
         );
         if (!res.ok) throw new Error("Failed to start quiz");
-
-        const data = await res.json();
+        data = await res.json();
         setAttemptId(data.attemptId);
         setQuestions(data.questions);
-      } catch (error) {
-        console.error("Failed to start quiz:", error);
-        toast.error("Could not load quiz questions.");
-      } finally {
-        setIsLoading(false);
       }
+    } catch (error) {
+      console.error("Failed to load quiz:", error);
+      toast.error("Could not load quiz questions.");
+    } finally {
+      setIsLoading(false);
     }
-    startQuiz();
-  }, [searchParams, session]);
+  };
+
+  if (session) { // Only run if the user session is available
+    loadQuiz();
+  }
+}, [searchParams, session]);
 
   // helpers
   const currentQuestion = questions[currentQuestionIndex];
@@ -87,9 +143,27 @@ export default function PracticePage() {
     selectedAnswers[currentQuestion.id] === currentQuestion.correctAnswer;
 
   // handlers unchanged...
-  const handleAnswerSelect = (questionId: number, answerId: string) => {
+const handleAnswerSelect = async (questionId: number, answerId: string) => {
     if (showFeedback) return;
     setSelectedAnswers((p) => ({ ...p, [questionId]: answerId }));
+ try {
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/quiz/answer`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.user?.backendToken}`,
+      },
+      body: JSON.stringify({
+        attemptId,
+        questionId,
+        answer: answerId,
+      }),
+    });
+  } catch (error) {
+    console.error("Failed to save answer:", error);
+    toast.error("Could not save your answer. Please check your connection.");
+  }
+
     const correct =
       questions.find((q) => q.id === questionId)?.correctAnswer === answerId;
     toast(correct ? "Correct!" : "Incorrect.", {

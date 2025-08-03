@@ -219,9 +219,9 @@ def save_answer(current_user):
         return jsonify({'message':'Attempt not found'}), 404
 
     # Merge into the JSON answers field
-    ans = attempt.answers or {}
-    ans[str(question_id)] = answer
-    attempt.answers = ans
+    new_answers = attempt.answers.copy()
+    new_answers[str(question_id)] = answer
+    attempt.answers = new_answers
     db.session.commit()
     return jsonify({'message':'Answer saved'}), 200
 
