@@ -1,50 +1,41 @@
 // app/api/auth/[...nextauth]/route.ts
+// NEW FILE: Handles NextAuth configuration, passing the is_admin flag from our backend into the session.
 
-import NextAuth from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
+import NextAuth, { AuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { AuthOptions } from "next-auth";
+import { BackendUser } from "@/types/next-auth";
 
 export const authOptions: AuthOptions = {
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
     CredentialsProvider({
       name: "Credentials",
       credentials: {
         username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" },
       },
-      // This function now receives a token from the Python backend
       async authorize(credentials) {
-        if (!credentials?.username || !credentials.password) {
+        if (!credentials) {
           return null;
         }
-
         try {
           const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/credentials`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               username: credentials.username,
               password: credentials.password,
             }),
+            headers: { "Content-Type": "application/json" }
           });
 
-          if (!res.ok) {
-            return null;
-          }
-
-          // The backend now returns user data AND a token
           const user = await res.json();
-          
-          // Return the user object, which now includes the token
-          return user;
 
-        } catch (error) {
-          console.error("Error in authorize callback:", error);
+          if (res.ok && user) {
+            // The user object from our backend contains id, name, token, and is_admin
+            return user;
+          }
+          return null;
+        } catch (e) {
+          console.error("Authorize error:", e);
           return null;
         }
       },
@@ -54,29 +45,29 @@ export const authOptions: AuthOptions = {
     strategy: "jwt",
   },
   callbacks: {
-    // The jwt callback now saves the backend token
     async jwt({ token, user }) {
-      // The `user` object here is what the authorize function returned
-      if (user) {
-        token.id = user.id;
-        // Add the backend token to the NextAuth token
-        token.backendToken = (user as any).token;
+      // The `user` object is passed on the first sign-in.
+      // We are casting it here to our BackendUser type.
+      const backendUser = user as BackendUser;
+      if (backendUser) {
+        token.id = backendUser.id;
+        token.backendToken = backendUser.token;
+        token.is_admin = backendUser.is_admin; // Pass is_admin to the token
       }
       return token;
     },
-    // The session callback now exposes the backend token to the client
     async session({ session, token }) {
-      if (token && session.user) {
+      if (session.user) {
         session.user.id = token.id as string;
-        // Add the backend token to the session object
-        session.user.backendToken = token.backendToken;
+        session.user.backendToken = token.backendToken as string;
+        session.user.is_admin = token.is_admin as boolean; // Pass is_admin to the session
       }
       return session;
     },
   },
   pages: {
-    signIn: "/login",
-  },
+    signIn: '/login',
+  }
 };
 
 const handler = NextAuth(authOptions);

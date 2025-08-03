@@ -1,4 +1,5 @@
 // components/Navbar.tsx
+// UPDATED: The "Admin" link is now visible to all logged-in users.
 
 "use client";
 
@@ -36,6 +37,19 @@ export const Navbar = () => {
               <Button variant="ghost">Tests Taken</Button>
             </Link>
             
+            {user && (
+              <Link href="/progress">
+                <Button variant="ghost">My Progress</Button>
+              </Link>
+            )}
+
+            {/* UPDATED: Show Admin link to all logged-in users */}
+            {user && (
+              <Link href="/admin">
+                <Button variant="ghost">Admin</Button>
+              </Link>
+            )}
+
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger>
@@ -58,8 +72,8 @@ export const Navbar = () => {
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <Link href="/api/auth/signin">
-                 <Button>Login</Button>
+              <Link href="/login">
+                <Button>Login</Button>
               </Link>
             )}
           </div>

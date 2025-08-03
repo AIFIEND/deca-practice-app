@@ -1,4 +1,5 @@
 // app/login/page.tsx
+// UPDATED: The login handler now uses NextAuth's built-in redirect to send users to the dashboard.
 
 'use client';
 
@@ -11,37 +12,24 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 export default function LoginPage() {
-  const router = useRouter();
+  const router = useRouter(); 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
+  // UPDATED: This function is now simplified to let NextAuth handle the redirect.
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    try {
-      // We only need the single NextAuth signIn call now.
-      // It handles calling our backend and setting up the session with the token.
-      const result = await signIn('credentials', {
-        redirect: false,
-        username: username,
-        password: password,
-      });
-
-      if (result?.error) {
-        setError('Invalid username or password.');
-        return;
-      }
-      
-      if (result?.ok) {
-        router.push('/dashboard');
-        router.refresh();
-      }
-    } catch (error) {
-      console.error('Login failed:', error);
-      setError('An unexpected error occurred.');
-    }
+    // The signIn function will handle the entire login flow.
+    // On success, it will automatically redirect to the callbackUrl.
+    // On failure, it will reload the login page with an error message in the URL.
+    await signIn('credentials', {
+      username: username,
+      password: password,
+      callbackUrl: '/dashboard', // Explicitly redirect to the dashboard on success
+    });
   };
 
   return (
