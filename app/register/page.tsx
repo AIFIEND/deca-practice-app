@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { postJson } from '@/lib/api';
+
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -19,13 +21,17 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
 
-    const res = await fetch('http://127.0.0.1:5000/api/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
 
-    const data = await res.json();
+const { res, data } = await postJson<any>('/api/register', { username, password }, { credentials: 'include' });
+
+
+
+if (res.ok) {
+  router.push('/login');
+} else {
+  setError(data?.message || 'Failed to register');
+}
+
 
     if (res.ok) {
       // Redirect to the login page after successful registration

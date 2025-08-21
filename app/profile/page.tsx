@@ -5,6 +5,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { apiFetch } from '@/lib/api';
+
 
 interface Attempt {
   id: number;
@@ -21,9 +23,10 @@ export default function ProfilePage() {
     async function fetchAttempts() {
       if (!user) return;
       try {
-        const res = await fetch('http://127.0.0.1:5000/api/user/attempts', {
-          credentials: 'include',
-        });
+const res = await apiFetch('/api/user/attempts', {
+  credentials: 'include',
+});
+
         if (res.ok) {
           const data = await res.json();
           setAttempts(data);

@@ -4,6 +4,8 @@
 import NextAuth, { AuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { BackendUser } from "@/types/next-auth";
+import { apiUrl } from "@/lib/api";
+
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -13,32 +15,43 @@ export const authOptions: AuthOptions = {
         username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
-        if (!credentials) {
-          return null;
-        }
-        try {
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/credentials`, {
-            method: 'POST',
-            body: JSON.stringify({
-              username: credentials.username,
-              password: credentials.password,
-            }),
-            headers: { "Content-Type": "application/json" }
-          });
+async authorize(credentials) {
+  if (!credentials?.username || !credentials?.password) return null;
 
-          const user = await res.json();
+  // Build the backend URL from the env var (no hardcoded IP)
+  const loginEndpoint = apiUrl("/api/auth/credentials");
 
-          if (res.ok && user) {
-            // The user object from our backend contains id, name, token, and is_admin
-            return user;
-          }
-          return null;
-        } catch (e) {
-          console.error("Authorize error:", e);
-          return null;
-        }
-      },
+  // Send the login to your Flask backend
+const res = await fetch(loginEndpoint, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    username: credentials.username,
+    password: credentials.password,
+  }),
+});
+
+if (res.ok) {
+  const user = await res.json(); // <- parse JSON directly now
+  if (user) return user;
+}
+return null;
+
+
+  // Read body as text first (so we can log even if it's not valid JSON)
+  const text = await res.text();
+
+  // Try to parse JSON after logging
+  let user: any = null;
+  try { user = JSON.parse(text); } catch {}
+
+  // If backend said OK and returned a user object, accept the login
+  if (res.ok && user) return user;
+
+  // Otherwise, reject the login
+  return null;
+}
+
     }),
   ],
   session: {

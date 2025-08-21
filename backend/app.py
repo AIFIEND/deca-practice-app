@@ -18,12 +18,14 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 
 # App & Database Configuration
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "a-really-secret-key-that-should-be-in-an-env-file"
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(basedir, "questions.db")
+
+# Require secrets from environment (no defaults)
+app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ["SQLALCHEMY_DATABASE_URI"]
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-ADMIN_PASSCODE = os.getenv("ADMIN_PASSCODE", "default_passcode")
-print(f"--- Loaded Admin Passcode: {ADMIN_PASSCODE} ---")
+# Also require this from env; do NOT print it
+ADMIN_PASSCODE = os.environ["ADMIN_PASSCODE"]
 
 CORS(app,
      origins=["http://localhost:3000"],

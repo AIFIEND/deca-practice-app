@@ -16,7 +16,6 @@ coverage/
 
 /deca-practice-review-safe-copy/
 
-
 # Python
 __pycache__/
 *.pyc

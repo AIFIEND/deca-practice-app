@@ -4,6 +4,7 @@
 
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { apiFetch } from '@/lib/api';
 
 interface User {
   username: string;
@@ -26,9 +27,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Check if a user session exists on the backend
     async function checkUserSession() {
       try {
-        const res = await fetch('http://127.0.0.1:5000/api/profile', {
-          credentials: 'include', // Send cookies
-        });
+const res = await apiFetch('/api/profile', {
+  credentials: 'include', // Send cookies
+});
         if (res.ok) {
           const data = await res.json();
           setUser(data);
@@ -44,10 +45,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await fetch('http://127.0.0.1:5000/api/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
+await apiFetch('/api/logout', {
+  method: 'POST',
+  credentials: 'include',
+});
+
       setUser(null);
       router.push('/login');
     } catch (error) {

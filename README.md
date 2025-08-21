@@ -90,8 +90,8 @@ Make sure your backend virtual environment is active, then run:
 ### Step 7 - Start the backend
     python app.py
 
-The backend will be available at:
-    http://localhost:5000
+The backend base URL is read from the environment:
+    NEXT_PUBLIC_API_URL=http://localhost:5000
 
 ---
 
