@@ -1,88 +1,78 @@
 // app/api/auth/[...nextauth]/route.ts
-// NEW FILE: Handles NextAuth configuration, passing the is_admin flag from our backend into the session.
+// NextAuth (Credentials) configured to call the Flask API via our helpers
+// and to persist backendToken + is_admin on the session.
 
-import NextAuth, { AuthOptions } from "next-auth";
-import CredentialsProvider from "next-auth/providers/credentials";
-import { BackendUser } from "@/types/next-auth";
-import { apiUrl } from "@/lib/api";
+import NextAuth, { NextAuthOptions } from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import { postJson } from "@/lib/api";
 
-
-export const authOptions: AuthOptions = {
+export const authOptions: NextAuthOptions = {
+  session: {
+    strategy: "jwt",
+  },
   providers: [
-    CredentialsProvider({
+    Credentials({
       name: "Credentials",
       credentials: {
         username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" },
       },
-async authorize(credentials) {
-  if (!credentials?.username || !credentials?.password) return null;
+      // This runs on the server
+      authorize: async (creds) => {
+        try {
+          const username = (creds?.username || "").trim();
+          const password = creds?.password || "";
 
-  // Build the backend URL from the env var (no hardcoded IP)
-  const loginEndpoint = apiUrl("/api/auth/credentials");
+          if (!username || !password) return null;
 
-  // Send the login to your Flask backend
-const res = await fetch(loginEndpoint, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    username: credentials.username,
-    password: credentials.password,
-  }),
-});
+          // Call Flask using our centralized helper (uses API_URL on server)
+          const data = await postJson<{
+            id: number;
+            name: string;
+            token: string;      // <-- Flask JWT
+            is_admin: boolean;
+          }>("/api/auth/credentials", { username, password });
 
-if (res.ok) {
-  const user = await res.json(); // <- parse JSON directly now
-  if (user) return user;
-}
-return null;
-
-
-  // Read body as text first (so we can log even if it's not valid JSON)
-  const text = await res.text();
-
-  // Try to parse JSON after logging
-  let user: any = null;
-  try { user = JSON.parse(text); } catch {}
-
-  // If backend said OK and returned a user object, accept the login
-  if (res.ok && user) return user;
-
-  // Otherwise, reject the login
-  return null;
-}
-
+          // Return the user object for NextAuth JWT
+          return {
+            id: String(data.id),
+            name: data.name,
+            backendToken: data.token,
+            is_admin: data.is_admin,
+          } as any;
+        } catch (err: any) {
+          // Wrong password, unknown user, or network error -> deny
+          return null;
+        }
+      },
     }),
   ],
-  session: {
-    strategy: "jwt",
-  },
   callbacks: {
+    // Copy fields onto the JWT at login
     async jwt({ token, user }) {
-      // The `user` object is passed on the first sign-in.
-      // We are casting it here to our BackendUser type.
-      const backendUser = user as BackendUser;
-      if (backendUser) {
-        token.id = backendUser.id;
-        token.backendToken = backendUser.token;
-        token.is_admin = backendUser.is_admin; // Pass is_admin to the token
+      if (user) {
+        token.id = (user as any).id;
+        token.name = (user as any).name;
+        token.backendToken = (user as any).backendToken;
+        token.is_admin = (user as any).is_admin;
       }
       return token;
     },
+    // Expose them on the session so the UI can read them
     async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-        session.user.backendToken = token.backendToken as string;
-        session.user.is_admin = token.is_admin as boolean; // Pass is_admin to the session
-      }
+      (session.user as any) = {
+        id: token.id ?? (session.user as any)?.id,
+        name: token.name ?? session.user?.name,
+        backendToken: token.backendToken,
+        is_admin: !!token.is_admin,
+      };
       return session;
     },
   },
   pages: {
-    signIn: '/login',
-  }
+    signIn: "/login",
+  },
 };
 
 const handler = NextAuth(authOptions);
-
 export { handler as GET, handler as POST };

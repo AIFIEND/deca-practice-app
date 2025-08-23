@@ -7,10 +7,14 @@ import { ProgressClient } from "./_components/progress-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { getJson } from '@/lib/api';
 
-// Types for the data from our new /api/user/progress endpoint
-type CategoryProgress = {
+
+// Types for the data from our /api/user/progress endpoint (list shape expected by ProgressClient)
+type ProgressRecord = {
   timestamp: string;
+  test_name: string;
+  category: string;
   score: number;
 };
 
@@ -20,9 +24,10 @@ type OverallPerformance = {
 };
 
 export type ProgressData = {
-  progress_over_time: Record<string, CategoryProgress[]>;
+  progress_data: ProgressRecord[];
   overall_performance: Record<string, OverallPerformance>;
 };
+
 
 async function getProgressData(session: any): Promise<ProgressData | null> {
   if (!session?.user?.backendToken) {
@@ -31,27 +36,27 @@ async function getProgressData(session: any): Promise<ProgressData | null> {
   }
 
   try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/user/progress`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${session.user.backendToken}`,
-        },
-        cache: 'no-store',
-      }
+    const raw = await getJson<ProgressData>("/api/user/progress", {
+      headers: { Authorization: `Bearer ${session.user.backendToken}` },
+      cache: "no-store",
+    });
+
+    // Optional: sort by time ascending so charts are stable
+    const sorted = [...(raw.progress_data || [])].sort((a, b) =>
+      a.timestamp.localeCompare(b.timestamp)
     );
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch progress data: ${response.statusText}`);
-    }
-
-    return await response.json();
+    return {
+      progress_data: sorted,
+      overall_performance: raw.overall_performance || {},
+    };
   } catch (error) {
     console.error("Could not fetch progress data:", error);
     return null;
   }
 }
+
+
 
 export default async function ProgressPage() {
   const session = await getServerSession(authOptions);
@@ -80,7 +85,8 @@ export default async function ProgressPage() {
     <div className="container mx-auto p-4">
       <h1 className="text-3xl font-bold mb-6">My Progress</h1>
       {progressData ? (
-        <ProgressClient data={progressData} />
+  <ProgressClient data={progressData} />
+
       ) : (
         <Card>
             <CardHeader>

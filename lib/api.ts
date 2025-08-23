@@ -1,47 +1,81 @@
 // lib/api.ts
-const raw =
-  process.env.NEXT_PUBLIC_API_URL || // works in browser and server
-  process.env.API_URL;               // optional server-only backup
+// Centralized API base + fetch helpers with lightweight diagnostics.
 
-if (!raw) {
-  throw new Error("Missing NEXT_PUBLIC_API_URL or API_URL");
+function getBaseUrl(): string {
+  const isServer = typeof window === 'undefined';
+  const base =
+    (isServer ? process.env.API_URL : process.env.NEXT_PUBLIC_API_URL) || '';
+  return base.replace(/\/+$/, ''); // strip trailing slash
 }
 
-// Remove trailing slashes so we do not get double slashes
-const BASE = raw.replace(/\/+$/, "");
-
-
-
-
-
-// Builds a full URL from "/api/whatever"
 export function apiUrl(path: string): string {
-  const p = path.startsWith("/") ? path : `/${path}`;
-  return new URL(p, BASE).toString();
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return `${getBaseUrl()}${p}`;
 }
 
-// Generic fetch that sends JSON by default
-export async function apiFetch(path: string, init: RequestInit = {}) {
-  return fetch(apiUrl(path), {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init.headers || {}),
-    },
-  });
+export async function apiFetch(
+  path: string,
+  init: RequestInit = {}
+): Promise<Response> {
+  const url = apiUrl(path);
+
+  // Normalize headers so we can log them.
+  const headers = new Headers(init.headers || {});
+  // (Auth header will be added by callers for now; diagnostics below will show it.)
+
+  if (process.env.NODE_ENV !== 'production') {
+    const logged: Record<string, string> = {};
+    headers.forEach((v, k) => {
+      logged[k] = k.toLowerCase() === 'authorization' ? 'Bearer ***' : v;
+    });
+    // Beginner-friendly, visible in browser console and Node logs:
+    // Shows URL, method, and (masked) headers for 401/CORS debugging.
+    // eslint-disable-next-line no-console
+    console.debug('[apiFetch]', {
+      url,
+      method: (init.method || 'GET').toUpperCase(),
+      headers: logged,
+    });
+  }
+
+  return fetch(url, { ...init, headers });
 }
 
-// Convenience for POSTing JSON and parsing JSON back
-export async function postJson<T>(
+async function readJson<T>(res: Response): Promise<T> {
+  const data = (await res
+    .json()
+    .catch(() => ({}))) as unknown as Record<string, any>;
+
+  if (!res.ok) {
+    const err: any = new Error(data?.message || `Request failed: ${res.status}`);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return data as T;
+}
+
+export async function getJson<T = any>(
+  path: string,
+  init: RequestInit = {}
+): Promise<T> {
+  const res = await apiFetch(path, { ...init, method: 'GET' });
+  return readJson<T>(res);
+}
+
+export async function postJson<T = any>(
   path: string,
   body: unknown,
-  init?: RequestInit
-): Promise<{ res: Response; data: T }> {
+  init: RequestInit = {}
+): Promise<T> {
+  const headers = new Headers(init.headers || {});
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+
   const res = await apiFetch(path, {
-    method: "POST",
+    ...init,
+    method: 'POST',
+    headers,
     body: JSON.stringify(body),
-    ...(init || {}),
   });
-  const data = (await res.json().catch(() => ({}))) as T;
-  return { res, data };
+  return readJson<T>(res);
 }

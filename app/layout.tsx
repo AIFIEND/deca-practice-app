@@ -3,7 +3,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import NextAuthProvider from "@/context/NextAuthProvider";
-import { Navbar } from "@/components/Navbar"; // This is the line we're fixing
+import Navbar from '@/components/Navbar';
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 

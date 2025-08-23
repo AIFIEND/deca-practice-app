@@ -11,6 +11,9 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from dotenv import load_dotenv
 import random # NEW: Import the random module for shuffling
+from time import time
+from collections import defaultdict
+
 
 load_dotenv() 
 
@@ -27,15 +30,54 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 # Also require this from env; do NOT print it
 ADMIN_PASSCODE = os.environ["ADMIN_PASSCODE"]
 
-CORS(app,
-     origins=["http://localhost:3000"],
-     methods=["GET", "POST", "OPTIONS"],
-     allow_headers=["Authorization", "Content-Type"],
-     supports_credentials=True
+# Support one or many origins in FRONTEND_ORIGIN, e.g.
+# FRONTEND_ORIGIN=http://localhost:3000,http://192.168.0.65:3000
+_frontend_origin_raw = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
+FRONTEND_ORIGINS = [o.strip() for o in _frontend_origin_raw.split(",") if o.strip()]
+
+CORS(
+    app,
+    origins=FRONTEND_ORIGINS,
+    methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    supports_credentials=True,
 )
 
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
+
+# --- Simple in-memory rate limiter for admin passcode ---
+# Allow 5 attempts per 5 minutes per IP (dev-safe; swap for Redis in prod).
+ADMIN_RATE_WINDOW = 5 * 60  # seconds
+ADMIN_RATE_MAX = 5
+_admin_attempts = defaultdict(list)  # ip -> [timestamps]
+
+def _admin_rate_limited(ip: str) -> bool:
+    now = time()
+    # Drop stale attempts outside the window
+    _admin_attempts[ip] = [t for t in _admin_attempts[ip] if now - t < ADMIN_RATE_WINDOW]
+    if len(_admin_attempts[ip]) >= ADMIN_RATE_MAX:
+        return True
+    _admin_attempts[ip].append(now)
+    return False
+
+# --- Simple in-memory rate limiter for LOGIN ---
+# Allow 10 attempts per 5 minutes per IP (dev-safe; use Redis in prod).
+LOGIN_RATE_WINDOW = 5 * 60  # seconds
+LOGIN_RATE_MAX = 10
+_login_attempts = defaultdict(list)  # ip -> [timestamps]
+
+def _login_rate_limited(ip: str) -> bool:
+    now = time()
+    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < LOGIN_RATE_WINDOW]
+    if len(_login_attempts[ip]) >= LOGIN_RATE_MAX:
+        return True
+    _login_attempts[ip].append(now)
+    return False
+
+
+def is_production() -> bool:
+    return os.environ.get("FLASK_ENV") == "production" or os.environ.get("ENV") == "production"
 
 
 # --- Database Model Definitions ---
@@ -107,55 +149,129 @@ class QuizAttempt(db.Model):
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        # Read token from Authorization: Bearer <token>
+        auth = request.headers.get("Authorization", "")
         token = None
-        if 'Authorization' in request.headers:
-            token = request.headers['Authorization'].split(" ")[1]
+        if auth.startswith("Bearer "):
+            token = auth.split(" ", 1)[1].strip()
+
         if not token:
-            return jsonify({'message': 'Token is missing!'}), 401
+            return jsonify({"message": "Authorization token is missing"}), 401
+
         try:
-            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
-            current_user = User.query.get(data['user_id'])
+            # Allow small clock skew (30s) to avoid edge cases around expiry
+            payload = jwt.decode(
+                token,
+                app.config["SECRET_KEY"],
+                algorithms=["HS256"],
+                options={"require": ["exp"]},
+                leeway=30,
+            )
+            user_id = payload.get("user_id")
+            if not user_id:
+                return jsonify({"message": "Invalid token payload"}), 401
+
+            current_user = User.query.get(user_id)
             if not current_user:
-                return jsonify({'message': 'User not found!'}), 401
-        except:
-            return jsonify({'message': 'Token is invalid!'}), 401
+                return jsonify({"message": "User not found"}), 401
+
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Token expired"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Token invalid"}), 401
+
         return f(current_user, *args, **kwargs)
+
     return decorated
 
 def admin_required(f):
     @wraps(f)
-    @token_required
-    def decorated(current_user, *args, **kwargs):
-        if current_user.is_admin:
-            return f(current_user, *args, **kwargs)
-        
-        admin_access_token = request.cookies.get('admin_access_token')
-        if not admin_access_token:
-            return jsonify({'message': 'Admin privileges required!'}), 403
+    def wrapper(*args, **kwargs):
+        # First, require a valid user token
+        auth = request.headers.get("Authorization", "")
+        token = None
+        if auth.startswith("Bearer "):
+            token = auth.split(" ", 1)[1].strip()
+        if not token:
+            return jsonify({"message": "Authorization token is missing"}), 401
+
         try:
-            jwt.decode(admin_access_token, app.config['SECRET_KEY'], algorithms=["HS256"])
-        except:
-            return jsonify({'message': 'Admin access token is invalid or expired!'}), 403
+            payload = jwt.decode(
+                token,
+                app.config["SECRET_KEY"],
+                algorithms=["HS256"],
+                options={"require": ["exp"]},
+                leeway=30,
+            )
+            user_id = payload.get("user_id")
+            is_admin_flag = payload.get("is_admin", False)
+            current_user = User.query.get(user_id)
+            if not current_user:
+                return jsonify({"message": "User not found"}), 401
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Token expired"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Token invalid"}), 401
+
+        # If the user has admin role, allow immediately
+        if getattr(current_user, "is_admin", False) or is_admin_flag:
+            return f(current_user, *args, **kwargs)
+
+        # Otherwise, check the short-lived admin cookie from the passcode gate
+        admin_access_token = request.cookies.get("admin_access_token")
+        if not admin_access_token:
+            return jsonify({"message": "Admin privileges required"}), 403
+
+        try:
+            jwt.decode(
+                admin_access_token,
+                app.config["SECRET_KEY"],
+                algorithms=["HS256"],
+                options={"require": ["exp"]},
+                leeway=30,
+            )
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Admin access expired"}), 403
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Admin access token invalid"}), 403
 
         return f(current_user, *args, **kwargs)
-    return decorated
+
+    return wrapper
 
 # --- API Endpoints ---
+
+# --- Minimal security headers for every response ---
+@app.after_request
+def set_security_headers(resp):
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "same-origin"
+    # Lock down some powerful features by default
+    resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return resp
+
 
 @app.route('/api/register', methods=['POST'])
 def register_user():
     data = request.get_json() or {}
-    username = data.get('username')
-    password = data.get('password')
+    username = (data.get('username') or '').strip()
+    password = data.get('password') or ''
 
+    # Hardened validation (INSIDE the function)
     if not username or not password:
         return jsonify({'message': 'Username and password required'}), 400
+    if len(username) < 3:
+        return jsonify({'message': 'Username must be at least 3 characters'}), 400
+    if len(password) < 8:
+        return jsonify({'message': 'Password must be at least 8 characters'}), 400
     if User.query.filter_by(username=username).first():
         return jsonify({'message': 'User already exists'}), 400
 
     user = User(username=username)
     user.set_password(password)
 
+    # First user becomes admin
     if User.query.count() == 0:
         user.is_admin = True
 
@@ -172,30 +288,44 @@ def register_user():
         algorithm="HS256"
     )
 
-    return jsonify({'id': user.id, 'name': user.username, 'token': token, 'is_admin': user.is_admin}), 201
+    return jsonify({
+        'id': user.id,
+        'name': user.username,
+        'token': token,
+        'is_admin': user.is_admin
+    }), 201
+
 
 @app.route('/api/auth/credentials', methods=['POST'])
 def verify_and_get_token():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown').split(',')[0].strip()
+    if _login_rate_limited(ip):
+        return jsonify({'message': 'Too many login attempts, please try again later'}), 429
+
+    data = request.get_json() or {}
+    username = (data.get('username') or '').strip()
+    password = data.get('password') or ''
+
+    if not username or not password:
+        return jsonify({"message": "Username and password required"}), 400
+
     user = User.query.filter_by(username=username).first()
+    if not user or not user.check_password(password):
+        return jsonify({"message": "Invalid username or password"}), 401
 
-    if user and user.check_password(password):
-        token = jwt.encode({
-            'user_id': user.id,
-            'is_admin': user.is_admin,
-            'exp': datetime.utcnow() + timedelta(hours=24)
-        }, app.config['SECRET_KEY'], algorithm="HS256")
-        
-        return jsonify({
-            'id': user.id,
-            'name': user.username,
-            'token': token,
-            'is_admin': user.is_admin
-        }), 200
+    token = jwt.encode({
+        'user_id': user.id,
+        'is_admin': user.is_admin,
+        'exp': datetime.utcnow() + timedelta(hours=24)
+    }, app.config['SECRET_KEY'], algorithm="HS256")
+    
+    return jsonify({
+        'id': user.id,
+        'name': user.username,
+        'token': token,
+        'is_admin': user.is_admin
+    }), 200
 
-    return jsonify({"message": "Invalid username or password"}), 401
 
 # UPDATED: This endpoint now shuffles the questions before creating the attempt.
 @app.route('/api/quiz/start', methods=['POST'])
@@ -300,7 +430,12 @@ def get_user_progress(current_user):
 
 @app.route('/api/admin/verify-passcode', methods=['POST'])
 def verify_admin_passcode():
-    data = request.get_json()
+    # Rate limit by client IP
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown').split(',')[0].strip()
+    if _admin_rate_limited(ip):
+        return jsonify({'message': 'Too many attempts, please try again later'}), 429
+
+    data = request.get_json() or {}
     passcode = data.get('passcode')
 
     if not passcode or passcode != ADMIN_PASSCODE:
@@ -316,9 +451,10 @@ def verify_admin_passcode():
         'admin_access_token',
         value=admin_access_token,
         httponly=True,
-        secure=True, 
-        samesite='Lax',
-        max_age=3600
+        secure=is_production(),  # True in prod (HTTPS), False in dev
+        samesite='None' if is_production() else 'Lax',
+        max_age=3600,
+        path="/",
     )
     return resp
 
@@ -431,6 +567,14 @@ def get_quiz_config():
         'categories': [c[0] for c in categories],
         'difficulties': [d[0] for d in difficulties]
     })
+
+@app.route('/api/health', methods=['GET'])
+def health():
+    return jsonify({
+        'status': 'ok',
+        'time': datetime.utcnow().isoformat()
+    }), 200
+
 
 if __name__ == '__main__':
     app.run(debug=True)

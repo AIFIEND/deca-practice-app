@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { getJson } from '@/lib/api';
 
 export default function StartQuizPage() {
   const router = useRouter();
@@ -28,7 +29,7 @@ export default function StartQuizPage() {
   useEffect(() => {
     async function fetchConfig() {
       try {
-const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/quiz-config`);        const data = await res.json();
+const data = await getJson('/api/quiz-config');
         // Filter the categories from the API against our approved list
         setAllCategories(data.categories.filter((cat: string) => approvedCategories.includes(cat)));
         setAllDifficulties(data.difficulties);

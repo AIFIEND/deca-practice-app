@@ -19,6 +19,7 @@ import {
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Flag, X } from "lucide-react";
 import { toast } from "sonner";
+import { postJson, getJson } from '@/lib/api';
 
 export default function PracticePage() {
   const { data: session, status } = useSession();
@@ -74,16 +75,12 @@ export default function PracticePage() {
       try {
         let data;
         if (attemptIdFromUrl) {
-          const res = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/quiz/resume/${attemptIdFromUrl}`,
-            {
-              headers: {
-                Authorization: `Bearer ${session?.user?.backendToken}`,
-              },
-            }
-          );
-          if (!res.ok) throw new Error("Failed to resume quiz");
-          data = await res.json();
+data = await getJson(`/api/quiz/resume/${attemptIdFromUrl}`, {
+  headers: {
+    Authorization: session?.user?.backendToken ? `Bearer ${session.user.backendToken}` : '',
+  },
+});
+
           const savedAnswers = data.answersSoFar || {};
           setAttemptId(parseInt(attemptIdFromUrl, 10));
           setQuestions(data.questions);
@@ -101,25 +98,22 @@ export default function PracticePage() {
           if (cats.length) testName = `${cats.join(", ")} Quiz`;
           else if (diffs.length) testName = `${diffs.join(", ")} Difficulty Quiz`;
 
-          const res = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/quiz/start`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${session?.user?.backendToken}`,
-              },
-              body: JSON.stringify({
-                categories: cats,
-                difficulties: diffs,
-                testName,
-              }),
-            }
-          );
-          if (!res.ok) throw new Error("Failed to start quiz");
-          data = await res.json();
-          setAttemptId(data.attemptId);
-          setQuestions(data.questions);
+const data = await postJson(
+  '/api/quiz/start',
+  {
+    categories: cats,
+    difficulties: diffs,
+    testName,
+  },
+  {
+    headers: {
+      Authorization: session?.user?.backendToken ? `Bearer ${session.user.backendToken}` : '',
+    },
+  }
+);
+setAttemptId(data.attemptId);
+setQuestions(data.questions);
+
         }
       } catch (error) {
         console.error("Failed to load quiz:", error);
@@ -152,18 +146,20 @@ export default function PracticePage() {
 
     try {
       setSelectedAnswers((p) => ({ ...p, [questionId]: answerId }));
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/quiz/answer`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.user?.backendToken}`,
-        },
-        body: JSON.stringify({
-          attemptId,
-          questionId,
-          answer: answerId,
-        }),
-      });
+await postJson(
+  '/api/quiz/answer',
+  {
+    attemptId,
+    questionId,
+    answer: answerId,
+  },
+  {
+    headers: {
+      Authorization: session?.user?.backendToken ? `Bearer ${session.user.backendToken}` : '',
+    },
+  }
+);
+
     } catch (error) {
       console.error("Failed to save answer:", error);
       toast.error("Could not save your answer. Please check your connection.");
@@ -214,27 +210,24 @@ export default function PracticePage() {
       return;
     }
 
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/quiz/submit`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.user.backendToken}`,
-          },
-          body: JSON.stringify({
-            attemptId,
-            score: Math.round(finalScore),
-          }),
-        }
-      );
-      if (!res.ok) throw new Error("Failed to save score on the server.");
-      toast.success("Quiz score saved successfully!");
-    } catch (error) {
-      console.error("Failed to save quiz score:", error);
-      toast.error("Could not save your score.");
+try {
+  await postJson(
+    '/api/quiz/submit',
+    {
+      attemptId,
+      score: Math.round(finalScore),
+    },
+    {
+      headers: {
+        Authorization: session?.user?.backendToken ? `Bearer ${session.user.backendToken}` : '',
+      },
     }
+  );
+  toast.success("Quiz score saved successfully!");
+} catch (error) {
+  console.error("Failed to save quiz score:", error);
+  toast.error("Could not save your score.");
+}
   };
 
   if (isLoading) {

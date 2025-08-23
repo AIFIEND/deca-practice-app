@@ -1,79 +1,119 @@
 // app/register/page.tsx
+// Client page: create account -> show success -> auto-redirect to /login (and offer a button).
 
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { postJson } from '@/lib/api';
-
+import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { postJson } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import Link from "next/link";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
-  const handleRegister = async (e: React.FormEvent) => {
+  // After success, auto-redirect to /login in ~1.5s
+  useEffect(() => {
+    if (success) {
+      const t = setTimeout(() => router.push("/login"), 1500);
+      return () => clearTimeout(t);
+    }
+  }, [success, router]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-
-
-const { res, data } = await postJson<any>('/api/register', { username, password }, { credentials: 'include' });
-
-
-
-if (res.ok) {
-  router.push('/login');
-} else {
-  setError(data?.message || 'Failed to register');
-}
-
-
-    if (res.ok) {
-      // Redirect to the login page after successful registration
-      router.push('/login');
-    } else {
-      setError(data.message || 'Failed to register');
+    setErrorMsg(null);
+    setIsSubmitting(true);
+    try {
+      await postJson("/api/register", { username, password });
+      setSuccess(true);
+    } catch (err: any) {
+      const msg =
+        (err?.data && (err.data.message || err.data.error)) ||
+        err?.message ||
+        "Registration failed.";
+      setErrorMsg(msg);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <Card className="w-full max-w-sm">
+    <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center">
+      <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Register</CardTitle>
-          <CardDescription>Create a new account to get started.</CardDescription>
+          <CardTitle>Create your account</CardTitle>
+          <CardDescription>
+            Already have one?{" "}
+            <Link href="/login" className="underline">
+              Log in
+            </Link>
+            .
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleRegister} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            {error && <p className="text-sm text-red-500">{error}</p>}
-            <Button type="submit" className="w-full">
-              Create Account
-            </Button>
-          </form>
+          {success ? (
+            <Alert>
+              <AlertTitle>Success!</AlertTitle>
+              <AlertDescription>
+                Your account was created. Redirecting to{" "}
+                <span className="font-medium">Login</span>…
+              </AlertDescription>
+              <div className="mt-4">
+                <Button asChild className="w-full">
+                  <Link href="/login">Continue to Login</Link>
+                </Button>
+              </div>
+            </Alert>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {errorMsg && (
+                <Alert className="border-destructive/50">
+                  <AlertTitle>Couldn’t register</AlertTitle>
+                  <AlertDescription>{errorMsg}</AlertDescription>
+                </Alert>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <Input
+                  id="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="username"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? "Creating..." : "Create account"}
+              </Button>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>

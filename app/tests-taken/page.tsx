@@ -4,6 +4,8 @@ import { TestsTakenClient } from "./_components/tests-taken-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { getJson } from '@/lib/api';
+
 
 // This is the type for data coming directly from your Flask API
 type ApiTest = {
@@ -33,24 +35,13 @@ async function getTestsTaken(session: any): Promise<Test[]> {
   }
 
   try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/user/attempts`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${session.user.backendToken}`,
-        },
-        cache: 'no-store', // Ensures fresh data is fetched every time
-      }
-    );
+    const data = await getJson<ApiTest[]>("/api/user/attempts", {
+      headers: { Authorization: `Bearer ${session.user.backendToken}` },
+      cache: "no-store",
+    });
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch test attempts: ${response.statusText}`);
-    }
-
-    const data: ApiTest[] = await response.json();
-    return data.map((t) => ({
-      _id: t.id.toString(),
+    return (data || []).map((t) => ({
+      _id: String(t.id),
       testName: t.test_name,
       score: t.score,
       totalQuestions: t.total_questions,
@@ -62,6 +53,7 @@ async function getTestsTaken(session: any): Promise<Test[]> {
     return [];
   }
 }
+
 
 // The main page component now handles the auth check
 export default async function TestsTakenPage() {

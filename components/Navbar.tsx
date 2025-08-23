@@ -1,84 +1,95 @@
 // components/Navbar.tsx
-// UPDATED: The "Admin" link is now visible to all logged-in users.
+// Full navbar: shows logged-in username + avatar dropdown; removes the non-functional “Settings”.
 
 "use client";
 
 import Link from "next/link";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
+  DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { FaUser } from "react-icons/fa";
-import { ExitIcon, GearIcon } from "@radix-ui/react-icons";
-import { signOut } from "next-auth/react";
 
-export const Navbar = () => {
-  const user = useCurrentUser();
+export default function Navbar() {
+  const { data: session } = useSession();
+  const userName =
+    session?.user?.name ||
+    (session?.user as any)?.username ||
+    (session?.user as any)?.email ||
+    "User";
 
   return (
-    <nav className="bg-white shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-          <div className="flex items-center">
-            <Link href="/dashboard" className="text-xl font-bold text-gray-800">
-              DECA Prep
-            </Link>
-          </div>
-          <div className="flex items-center space-x-4">
-            <Link href="/dashboard">
-              <Button variant="ghost">Dashboard</Button>
-            </Link>
-            <Link href="/tests-taken">
-              <Button variant="ghost">Tests Taken</Button>
-            </Link>
-            
-            {user && (
-              <Link href="/progress">
-                <Button variant="ghost">My Progress</Button>
-              </Link>
-            )}
+    <header className="border-b bg-background">
+      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+        <Link href="/" className="font-semibold text-lg">
+          DECA Practice
+        </Link>
 
-            {/* UPDATED: Show Admin link to all logged-in users */}
-            {user && (
-              <Link href="/admin">
-                <Button variant="ghost">Admin</Button>
-              </Link>
-            )}
-
-            {user ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger>
-                  <Avatar>
-                    <AvatarImage src={user.image || ""} />
-                    <AvatarFallback className="bg-sky-500">
-                      <FaUser className="text-white" />
+        <nav className="flex items-center gap-3">
+          {!session ? (
+            <>
+              <Button variant="ghost" asChild>
+                <Link href="/login">Login</Link>
+              </Button>
+              <Button asChild>
+                <Link href="/register">Register</Link>
+              </Button>
+            </>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center gap-3 rounded-full px-2 py-1 hover:bg-accent">
+                  <span className="text-sm font-medium">{userName}</span>
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage alt={userName} />
+                    <AvatarFallback>
+                      {String(userName).slice(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem>
-                    <GearIcon className="h-4 w-4 mr-2" />
-                    Settings
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => signOut()}>
-                    <ExitIcon className="h-4 w-4 mr-2" />
-                    Logout
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <Link href="/login">
-                <Button>Login</Button>
-              </Link>
-            )}
-          </div>
-        </div>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel className="truncate">
+                  {userName}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+<DropdownMenuItem asChild>
+  <Link href="/dashboard">Dashboard</Link>
+</DropdownMenuItem>
+<DropdownMenuItem asChild>
+  <Link href="/progress">My Progress</Link>
+</DropdownMenuItem>
+
+{/* Admin: if user is admin show Dashboard, otherwise show gate */}
+{session?.user?.is_admin ? (
+  <DropdownMenuItem asChild>
+    <Link href="/admin/dashboard">Admin Dashboard</Link>
+  </DropdownMenuItem>
+) : (
+  <DropdownMenuItem asChild>
+    <Link href="/admin">Admin</Link>
+  </DropdownMenuItem>
+)}
+
+<DropdownMenuSeparator />
+                {/* Removed “Settings” (non-functional) */}
+                <DropdownMenuItem
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="text-destructive"
+                >
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </nav>
       </div>
-    </nav>
+    </header>
   );
-};
+}
