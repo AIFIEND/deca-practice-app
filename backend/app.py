@@ -35,6 +35,11 @@ ADMIN_PASSCODE = os.environ["ADMIN_PASSCODE"]
 _frontend_origin_raw = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
 FRONTEND_ORIGINS = [o.strip() for o in _frontend_origin_raw.split(",") if o.strip()]
 
+# Support one or many origins in FRONTEND_ORIGIN, e.g.
+# FRONTEND_ORIGIN=http://localhost:3000,http://192.168.0.65:3000
+_frontend_origin_raw = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
+FRONTEND_ORIGINS = [o.strip() for o in _frontend_origin_raw.split(",") if o.strip()]
+
 CORS(
     app,
     origins=FRONTEND_ORIGINS,
@@ -42,6 +47,7 @@ CORS(
     allow_headers=["Authorization", "Content-Type"],
     supports_credentials=True,
 )
+
 
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
