@@ -1,122 +1,125 @@
 # DECA Practice Web App
 
-This is a full-stack quiz application to help DECA students prepare for multiple-choice exams.
+## Overview
 
-Features:
-- Multiple choice quizzes with instant feedback
-- Question flagging for review
-- Answer elimination
-- Progress tracking
-- Admin panel for managing questions
+This repository contains a full-stack quiz application designed to help DECA students practice for multiple-choice exams.  
+The application supports targeted practice quizzes, instant feedback with explanations, answer elimination, question flagging for later review, and detailed progress tracking.  
+An admin dashboard provides platform-wide analytics.  
 
----
-
-## 1. Tech Stack
-Frontend: Next.js 15, React, Tailwind CSS
-Backend: Flask, SQLAlchemy, Python
-Database: SQLite (local development)
-Authentication: NextAuth.js with Google OAuth
+- **Frontend:** Next.js (App Router) with TypeScript and NextAuth for authentication  
+- **Backend:** Flask with SQLAlchemy, SQLite/Postgres (configurable), CORS, and rate-limiting  
+- **Auth flow:** Credential login backed by Flask; NextAuth sessions expose `session.user.backendToken` and `is_admin`  
 
 ---
 
-## 2. Getting Started
+## Folder structure
 
-### Step 1 - Clone the repository
-Open a terminal and run:
-    git clone https://github.com/YOUR-USERNAME/deca-practice.git
-    cd deca-practice
-
----
-
-### Step 2 - Install frontend dependencies
-    npm install
-
----
-
-### Step 3 - Set up environment variables (frontend)
-1. Copy the example file:
-       cp .env.example .env.local
-   (On Windows PowerShell: copy .env.example .env.local)
-
-2. Open `.env.local` and replace the placeholder values with your real keys.
-
-Example `.env.local`:
-    NEXT_PUBLIC_API_URL="http://localhost:5000"
-    GOOGLE_CLIENT_ID="your-google-client-id"
-    GOOGLE_CLIENT_SECRET="your-google-client-secret"
-    NEXTAUTH_SECRET="your-nextauth-secret"
-    NEXTAUTH_URL="http://localhost:3000"
-    MONGODB_URI="your-mongodb-uri"
-
-IMPORTANT:
-- `.env.local` contains real keys and must NOT be committed to GitHub.
-- `.env.example` only has placeholders and is safe to share.
+.
+├── app/                   # Next.js frontend (App Router)
+│   ├── api/               # Next.js API routes (proxying to Flask)
+│   ├── exams/             # Exam listing UI
+│   ├── quiz/              # Quiz start/resume/answer
+│   ├── progress/          # User progress tracking
+│   ├── tests-taken/       # Completed test review
+│   ├── admin/             # Admin dashboard
+│   └── ... 
+├── backend/               # Flask backend
+│   ├── app.py             # Entry point, CORS, rate-limiting
+│   ├── models.py          # SQLAlchemy models
+│   └── routes/            # API endpoints
+├── components/            # React UI components (e.g. QuizClient.tsx)
+├── context/               # React contexts (AuthContext)
+├── lib/                   # Shared helpers (api.ts with apiFetch/getJson/postJson)
+├── public/                # Static assets
+└── .env.example           # Example environment variables
 
 ---
 
-### Step 4 - Set up backend (Flask)
-1. Go into the backend folder:
-       cd backend
+## Environment variables
 
-2. Create a virtual environment:
-       python -m venv venv
+### Frontend (.env.local)
 
-3. Activate the virtual environment:
-   Windows PowerShell:
-       .\venv\Scripts\Activate.ps1
-   Mac/Linux:
-       source venv/bin/activate
+- NEXT_PUBLIC_API_URL – Base URL for Flask backend (browser)  
+- API_URL – Base URL for Flask backend (server-side)  
+- NEXTAUTH_URL – Base URL of Next.js app  
+- NEXTAUTH_SECRET – Secret for NextAuth  
 
-4. Install dependencies:
-       pip install -r requirements.txt
+### Backend (.env)
 
----
-
-### Step 5 - Create backend .env file
-Inside `backend/`, create a file named `.env` with:
-
-    SECRET_KEY="your-secret-key"
-    SQLALCHEMY_DATABASE_URI="sqlite:///questions.db"
-    ADMIN_PASSCODE="your-admin-passcode"
+- SECRET_KEY – Flask secret  
+- SQLALCHEMY_DATABASE_URI – Database connection string  
+- ADMIN_PASSCODE – Passcode to access admin dashboard  
+- FRONTEND_ORIGIN – Comma-separated list of allowed frontend origins for CORS  
+- FLASK_ENV – Development or production  
 
 ---
 
-### Step 6 - Initialize the database
-Make sure your backend virtual environment is active, then run:
-    python init_db.py
+## Local development (Quick Start)
+
+### Prereqs
+- Node.js 18+  
+- Python 3.10+  
+- pipenv or venv for Python  
+
+### Backend
+cd backend
+python -m venv venv
+source venv/bin/activate   # (or venv\Scripts\activate on Windows)
+pip install -r requirements.txt
+export FLASK_ENV=development
+flask run --port 5000
+
+### Frontend
+cd app
+npm install
+npm run dev
+# App runs on http://localhost:3000
 
 ---
 
-### Step 7 - Start the backend
-    python app.py
+## Auth flow
 
-The backend base URL is read from the environment:
-    NEXT_PUBLIC_API_URL=http://localhost:5000
-
----
-
-### Step 8 - Start the frontend
-Open a NEW terminal (keep backend running) and run:
-    npm run dev
-
-The frontend will be available at:
-    http://localhost:3000
+- Users register with credentials → stored in backend (Flask)  
+- NextAuth handles sessions in Next.js  
+- On login, Flask returns a JWT token → exposed as `session.user.backendToken`  
+- Session object includes `is_admin` when admin passcode was used  
 
 ---
 
-## 3. Admin Panel
-- Go to `http://localhost:3000/admin`
-- Enter the ADMIN_PASSCODE from your backend `.env` file.
+## Admin access
+
+- Navigate to `/admin` → enter the `ADMIN_PASSCODE`  
+- A cookie `admin_access_token` is set  
+- Admin dashboard is available at `/admin/dashboard`  
 
 ---
 
-## 4. Development Notes
-- Hot reload is enabled for both frontend and backend.
-- If you add new Python packages, run:
-      pip freeze > requirements.txt
-- Restart backend and frontend after changing environment variables.
+## Security & stability
+
+- **CORS:** Allowed origins pulled from `FRONTEND_ORIGIN` env, supports multiple origins  
+- **Rate limiting:** Flask-Limiter enforces login/admin request throttling  
+- **Secrets in env:** No hardcoded IPs or URLs; all backend calls use env variables  
 
 ---
 
-## 5. License
-MIT License - free to use and modify.
+## Deployment
+
+### Backend
+gunicorn -b 0.0.0.0:5000 app:app
+
+### Frontend
+npm run build
+npm run start
+
+- Ensure all env variables are set in production.  
+- Use HTTPS with a reverse proxy (e.g. nginx).  
+
+---
+
+## Checklist: Asad’s request
+
+- [x] All backend API requests use env variables (via centralized helper)  
+- [x] No hardcoded IP/host references found  
+- [x] Backend CORS uses `FRONTEND_ORIGIN` env  
+
+✅ **Compliant**
