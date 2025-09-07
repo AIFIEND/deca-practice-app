@@ -1,0 +1,60 @@
+services:
+  backend:
+    build:
+      context: ./backend_service
+      dockerfile: Dockerfile
+    container_name: deca_app_backend
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY}
+      - SQLALCHEMY_DATABASE_URI=${SQLALCHEMY_DATABASE_URI}
+      - ADMIN_PASSCODE=${ADMIN_PASSCODE}
+      - FRONTEND_ORIGIN=http://72.60.123.91
+    env_file:
+      - .env
+    volumes:
+      - backend_data:/app/instance
+    networks:
+      - deca_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend_service
+      dockerfile: Dockerfile
+    container_name: deca_app_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://72.60.123.91/api
+    env_file:
+      - .env
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - deca_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  backend_data:
+    driver: local
+
+networks:
+  deca_network:
+    driver: bridge

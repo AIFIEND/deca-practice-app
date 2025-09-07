@@ -582,5 +582,16 @@ def health():
     }), 200
 
 
+# Create database tables if they don't exist
+with app.app_context():
+    try:
+        db.create_all()
+        print("✅ Database tables initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Database initialization warning: {e}")
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Get port from environment variable or default to 5000
+    port = int(os.environ.get('PORT', 5000))
+    # Bind to all interfaces in Docker
+    app.run(host='0.0.0.0', port=port, debug=False)

@@ -3,7 +3,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense, useMemo, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Question } from "@/types";
@@ -21,7 +21,7 @@ import { Flag, X } from "lucide-react";
 import { toast } from "sonner";
 import { postJson, getJson } from '@/lib/api';
 
-export default function PracticePage() {
+function PracticePageContent() {
   const { data: session, status } = useSession();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -67,22 +67,32 @@ export default function PracticePage() {
   // across re-renders and doesn't trigger them, making it a reliable lock.
   const quizCreationInitiated = useRef(false);
 
+  // Extract URL parameters as stable strings
+  const attemptIdParam = searchParams.get("attemptId");
+  const categoriesParam = searchParams.get("categories");
+  const difficultiesParam = searchParams.get("difficulties");
+  const sessionToken = session?.user?.backendToken;
+
   useEffect(() => {
-    const attemptIdFromUrl = searchParams.get("attemptId");
+    // Only run if we have a session
+    if (!session) return;
+
+    // Prevent running if already loading or if quiz already initiated
+    if (isLoading) return;
 
     const loadQuiz = async () => {
       setIsLoading(true);
       try {
         let data;
-        if (attemptIdFromUrl) {
-data = await getJson(`/api/quiz/resume/${attemptIdFromUrl}`, {
-  headers: {
-    Authorization: session?.user?.backendToken ? `Bearer ${session.user.backendToken}` : '',
-  },
-});
+        if (attemptIdParam) {
+          data = await getJson(`/api/quiz/resume/${attemptIdParam}`, {
+            headers: {
+              Authorization: sessionToken ? `Bearer ${sessionToken}` : '',
+            },
+          });
 
           const savedAnswers = data.answersSoFar || {};
-          setAttemptId(parseInt(attemptIdFromUrl, 10));
+          setAttemptId(parseInt(attemptIdParam, 10));
           setQuestions(data.questions);
           setSelectedAnswers(savedAnswers);
           const firstUnansweredIndex = data.questions.findIndex(
@@ -92,28 +102,31 @@ data = await getJson(`/api/quiz/resume/${attemptIdFromUrl}`, {
             firstUnansweredIndex === -1 ? data.questions.length - 1 : firstUnansweredIndex
           );
         } else {
-          const cats = searchParams.get("categories")?.split(",") || [];
-          const diffs = searchParams.get("difficulties")?.split(",") || [];
+          // Only create new quiz if we haven't already initiated one
+          if (quizCreationInitiated.current) return;
+          quizCreationInitiated.current = true;
+
+          const cats = categoriesParam?.split(",") || [];
+          const diffs = difficultiesParam?.split(",") || [];
           let testName = "Practice Quiz";
           if (cats.length) testName = `${cats.join(", ")} Quiz`;
           else if (diffs.length) testName = `${diffs.join(", ")} Difficulty Quiz`;
 
-const data = await postJson(
-  '/api/quiz/start',
-  {
-    categories: cats,
-    difficulties: diffs,
-    testName,
-  },
-  {
-    headers: {
-      Authorization: session?.user?.backendToken ? `Bearer ${session.user.backendToken}` : '',
-    },
-  }
-);
-setAttemptId(data.attemptId);
-setQuestions(data.questions);
-
+          const data = await postJson(
+            '/api/quiz/start',
+            {
+              categories: cats,
+              difficulties: diffs,
+              testName,
+            },
+            {
+              headers: {
+                Authorization: sessionToken ? `Bearer ${sessionToken}` : '',
+              },
+            }
+          );
+          setAttemptId(data.attemptId);
+          setQuestions(data.questions);
         }
       } catch (error) {
         console.error("Failed to load quiz:", error);
@@ -123,18 +136,8 @@ setQuestions(data.questions);
       }
     };
 
-    // UPDATED: This logic now uses the ref to prevent multiple executions.
-    if (session) {
-      if (attemptIdFromUrl) {
-        loadQuiz();
-      } else if (!quizCreationInitiated.current) {
-        // The ref's `current` property is checked and then immediately set.
-        // This ensures that even if the effect runs again, this block won't be entered.
-        quizCreationInitiated.current = true;
-        loadQuiz();
-      }
-    }
-  }, [searchParams, session]); // The ref is not needed in the dependency array.
+    loadQuiz();
+  }, [attemptIdParam, categoriesParam, difficultiesParam, sessionToken, session]);
 
   const currentQuestion = questions[currentQuestionIndex];
   const isCorrect =
@@ -369,5 +372,13 @@ try {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function PracticePage() {
+  return (
+    <Suspense fallback={<div className="text-center p-10">Loading...</div>}>
+      <PracticePageContent />
+    </Suspense>
   );
 }
