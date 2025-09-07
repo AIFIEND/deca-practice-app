@@ -116,10 +116,3 @@ npm run start
 
 ---
 
-## Checklist: Asad’s request
-
-- [x] All backend API requests use env variables (via centralized helper)  
-- [x] No hardcoded IP/host references found  
-- [x] Backend CORS uses `FRONTEND_ORIGIN` env  
-
-✅ **Compliant**
