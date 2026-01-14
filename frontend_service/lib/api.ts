@@ -1,81 +1,50 @@
-// lib/api.ts
-// Centralized API base + fetch helpers with lightweight diagnostics.
+// frontend_service/lib/api.ts
+import { getSession } from "next-auth/react";
 
-function getBaseUrl(): string {
-  const isServer = typeof window === 'undefined';
-  const base =
-    (isServer ? process.env.API_URL : process.env.NEXT_PUBLIC_API_URL) || '';
-  return base.replace(/\/+$/, ''); // strip trailing slash
+// 1. Get the Backend URL from environment or default to localhost
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+// Helper to join paths cleanly (avoids double slashes like //api)
+function joinUrl(base: string, path: string) {
+  const cleanBase = base.replace(/\/+$/, ""); // Remove trailing slash
+  const cleanPath = path.replace(/^\/+/, ""); // Remove leading slash
+  return `${cleanBase}/${cleanPath}`;
 }
 
-export function apiUrl(path: string): string {
-  const p = path.startsWith('/') ? path : `/${path}`;
-  return `${getBaseUrl()}${p}`;
-}
+export async function apiFetch(endpoint: string, options: RequestInit = {}) {
+  const url = joinUrl(API_BASE, endpoint);
+  
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string>),
+  };
 
-export async function apiFetch(
-  path: string,
-  init: RequestInit = {}
-): Promise<Response> {
-  const url = apiUrl(path);
-
-  // Normalize headers so we can log them.
-  const headers = new Headers(init.headers || {});
-  // (Auth header will be added by callers for now; diagnostics below will show it.)
-
-  if (process.env.NODE_ENV !== 'production') {
-    const logged: Record<string, string> = {};
-    headers.forEach((v, k) => {
-      logged[k] = k.toLowerCase() === 'authorization' ? 'Bearer ***' : v;
-    });
-    // Beginner-friendly, visible in browser console and Node logs:
-    // Shows URL, method, and (masked) headers for 401/CORS debugging.
-    // eslint-disable-next-line no-console
-    console.debug('[apiFetch]', {
-      url,
-      method: (init.method || 'GET').toUpperCase(),
-      headers: logged,
-    });
-  }
-
-  return fetch(url, { ...init, headers });
-}
-
-async function readJson<T>(res: Response): Promise<T> {
-  const data = (await res
-    .json()
-    .catch(() => ({}))) as unknown as Record<string, any>;
-
-  if (!res.ok) {
-    const err: any = new Error(data?.message || `Request failed: ${res.status}`);
-    err.status = res.status;
-    err.data = data;
-    throw err;
-  }
-  return data as T;
-}
-
-export async function getJson<T = any>(
-  path: string,
-  init: RequestInit = {}
-): Promise<T> {
-  const res = await apiFetch(path, { ...init, method: 'GET' });
-  return readJson<T>(res);
-}
-
-export async function postJson<T = any>(
-  path: string,
-  body: unknown,
-  init: RequestInit = {}
-): Promise<T> {
-  const headers = new Headers(init.headers || {});
-  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-
-  const res = await apiFetch(path, {
-    ...init,
-    method: 'POST',
+  const response = await fetch(url, {
+    ...options,
     headers,
-    body: JSON.stringify(body),
   });
-  return readJson<T>(res);
+
+  // 2. Handle Errors (404, 500, 401, etc.)
+  if (!response.ok) {
+    let errorMessage = `API Error: ${response.status} ${response.statusText}`;
+    try {
+        // Try to parse the error message from the backend JSON
+        const errorData = await response.json();
+        if (errorData.message) errorMessage = errorData.message;
+    } catch (e) {
+        // If JSON parse fails, stick with the status text
+    }
+    throw new Error(errorMessage);
+  }
+
+  return response;
+}
+
+export async function postJson(endpoint: string, data: any, options: RequestInit = {}) {
+  const res = await apiFetch(endpoint, {
+    ...options,
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return res.json();
 }
