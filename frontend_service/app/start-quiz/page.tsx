@@ -1,109 +1,135 @@
 // app/start-quiz/page.tsx
+"use client";
 
-'use client'; // This component is interactive, so it's a client component
-
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { getJson } from '@/lib/api';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react"; // <--- IMPORT SESSION
+import { apiFetch, postJson } from "@/lib/api"; 
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 export default function StartQuizPage() {
   const router = useRouter();
-  const [allCategories, setAllCategories] = useState<string[]>([]);
-  const [allDifficulties, setAllDifficulties] = useState<string[]>([]);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [selectedDifficulties, setSelectedDifficulties] = useState<string[]>([]);
+  const { data: session } = useSession(); // <--- GET SESSION
+  const token = (session?.user as any)?.backendToken; // <--- EXTRACT TOKEN
 
-  const approvedCategories = [
-    'Business Law', 'Communication Skills', 'Customer Relations', 'Economics',
-    'Emotional Intelligence', 'Entrepreneurship', 'Financial Analysis',
-    'Financial Management', 'Human Resources Management', 'Information Management',
-    'Marketing', 'Operations', 'Professional Development', 'Risk Management', 'Strategic Management'
-  ];
+  const [config, setConfig] = useState<{
+    categories: string[];
+    difficulties: string[];
+  } | null>(null);
 
-  // Fetch the config data from the API when the page loads
+  const [selectedCats, setSelectedCats] = useState<string[]>([]);
+  const [selectedDiffs, setSelectedDiffs] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
+
+  // 1. Load available categories/difficulties
   useEffect(() => {
-    async function fetchConfig() {
-      try {
-const data = await getJson('/api/quiz-config');
-        // Filter the categories from the API against our approved list
-        setAllCategories(data.categories.filter((cat: string) => approvedCategories.includes(cat)));
-        setAllDifficulties(data.difficulties);
-      } catch (error) {
-        console.error("Failed to fetch quiz config:", error);
-      }
-    }
-    fetchConfig();
-  }, []); // Empty dependency array means this runs once on mount
+    // This endpoint is public, so no token needed
+    apiFetch("/api/quiz-config")
+      .then((res) => res.json())
+      .then((data) => {
+        setConfig(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to load config", err);
+        setLoading(false);
+      });
+  }, []);
 
-  const handleCheckboxChange = (
-    value: string,
-    list: string[],
-    setter: React.Dispatch<React.SetStateAction<string[]>>
-  ) => {
-    if (list.includes(value)) {
-      setter(list.filter(item => item !== value));
-    } else {
-      setter([...list, value]);
+  // 2. Handle Start
+  const handleStart = async () => {
+    if (!token) {
+        alert("You must be logged in to start a quiz.");
+        return;
+    }
+    setStarting(true);
+    try {
+      // Pass the token in the headers explicitly
+      const res = await postJson("/api/quiz/start", {
+        categories: selectedCats,
+        difficulties: selectedDiffs,
+        testName: "Custom Practice",
+      }, {
+        headers: { "Authorization": `Bearer ${token}` } // <--- ATTACH TOKEN
+      });
+
+      router.push(`/quiz/${res.attemptId}`);
+    } catch (err) {
+      console.error("Failed to start quiz", err);
+      setStarting(false);
     }
   };
 
-  const handleStartQuiz = () => {
-    const params = new URLSearchParams();
-    if (selectedCategories.length > 0) {
-      params.append('categories', selectedCategories.join(','));
-    }
-    if (selectedDifficulties.length > 0) {
-      params.append('difficulties', selectedDifficulties.join(','));
-    }
-    router.push(`/practice?${params.toString()}`);
-  };
+  if (loading) return <div className="p-8">Loading configuration...</div>;
+  if (!config) return <div className="p-8">Error loading config.</div>;
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <Card className="w-full max-w-2xl">
+    <div className="container mx-auto p-4 max-w-2xl">
+      <Card>
         <CardHeader>
-          <CardTitle>Start a New Practice Quiz</CardTitle>
-          <CardDescription>Select filters to customize your quiz. Leave blank to include all questions.</CardDescription>
+          <CardTitle>Start a Practice Quiz</CardTitle>
+          <CardDescription>Select your preferences below.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          
+          {/* Categories */}
           <div className="space-y-2">
             <h3 className="font-semibold">Categories</h3>
-            <div className="grid grid-cols-2 gap-4">
-              {allCategories.map(category => (
-                <div key={category} className="flex items-center space-x-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {config.categories.map((cat) => (
+                <div key={cat} className="flex items-center space-x-2">
                   <Checkbox
-                    id={`cat-${category}`}
-                    onCheckedChange={() => handleCheckboxChange(category, selectedCategories, setSelectedCategories)}
+                    id={`cat-${cat}`}
+                    checked={selectedCats.includes(cat)}
+                    onCheckedChange={(checked) => {
+                      if (checked) setSelectedCats([...selectedCats, cat]);
+                      else setSelectedCats(selectedCats.filter((c) => c !== cat));
+                    }}
                   />
-                  <Label htmlFor={`cat-${category}`} className="capitalize">{category}</Label>
+                  <Label htmlFor={`cat-${cat}`}>{cat}</Label>
                 </div>
               ))}
             </div>
           </div>
 
+          {/* Difficulties */}
           <div className="space-y-2">
             <h3 className="font-semibold">Difficulties</h3>
-            <div className="grid grid-cols-2 gap-4">
-              {allDifficulties.map(difficulty => (
-                <div key={difficulty} className="flex items-center space-x-2">
+            <div className="flex flex-wrap gap-4">
+              {config.difficulties.map((diff) => (
+                <div key={diff} className="flex items-center space-x-2">
                   <Checkbox
-                    id={`diff-${difficulty}`}
-                    onCheckedChange={() => handleCheckboxChange(difficulty, selectedDifficulties, setSelectedDifficulties)}
+                    id={`diff-${diff}`}
+                    checked={selectedDiffs.includes(diff)}
+                    onCheckedChange={(checked) => {
+                      if (checked) setSelectedDiffs([...selectedDiffs, diff]);
+                      else setSelectedDiffs(selectedDiffs.filter((d) => d !== diff));
+                    }}
                   />
-                  <Label htmlFor={`diff-${difficulty}`} className="capitalize">{difficulty}</Label>
+                  <Label htmlFor={`diff-${diff}`}>{diff}</Label>
                 </div>
               ))}
             </div>
           </div>
 
-          <Button onClick={handleStartQuiz} className="w-full" size="lg">
-            Start Quiz
+          <Button 
+            onClick={handleStart} 
+            disabled={starting} 
+            className="w-full"
+          >
+            {starting ? "Starting..." : "Start Quiz"}
           </Button>
+
         </CardContent>
       </Card>
     </div>
