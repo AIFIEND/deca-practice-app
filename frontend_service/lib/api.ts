@@ -16,7 +16,7 @@ export function apiUrl(path: string) {
   return `${API_BASE}/${cleanPath}`;
 }
 
-export async function apiFetch(endpoint: string, options: RequestInit = {}) {
+export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
   const url = apiUrl(endpoint);
   
   const headers: Record<string, string> = {
@@ -41,15 +41,22 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
   }
 
   return response;
-}
+};
 
 // 2. These were missing! We add them back now.
-export async function getJson<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+export const getJson = async <T = any>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> => {
   const res = await apiFetch(endpoint, { ...options, method: 'GET' });
   return res.json();
-}
+};
 
-export async function postJson<T = any>(endpoint: string, data: any, options: RequestInit = {}): Promise<T> {
+export const postJson = async <T = any>(
+  endpoint: string,
+  data: any,
+  options: RequestInit = {}
+): Promise<T> => {
   const res = await apiFetch(endpoint, {
     ...options,
     method: 'POST',
@@ -57,6 +64,4 @@ export async function postJson<T = any>(endpoint: string, data: any, options: Re
     body: JSON.stringify(data),
   });
   return res.json();
-}
-
-export { apiFetch, getJson, postJson };
+};
