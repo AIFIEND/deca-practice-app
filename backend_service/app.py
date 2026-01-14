@@ -24,8 +24,14 @@ app = Flask(__name__)
 
 # Require secrets from environment (no defaults)
 app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ["SQLALCHEMY_DATABASE_URI"]
+database_url = os.environ["SQLALCHEMY_DATABASE_URI"]
+app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+if database_url.startswith("postgres") and "sslmode=" not in database_url:
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "connect_args": {"sslmode": "require"}
+    }
 
 # Also require this from env; do NOT print it
 ADMIN_PASSCODE = os.environ["ADMIN_PASSCODE"]
