@@ -2,17 +2,16 @@
 import { getSession } from "next-auth/react";
 
 // 1. Get the Backend URL from environment or default to localhost
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/+$/, "");
 
-// Helper to join paths cleanly (avoids double slashes like //api)
-function joinUrl(base: string, path: string) {
-  const cleanBase = base.replace(/\/+$/, ""); // Remove trailing slash
-  const cleanPath = path.replace(/^\/+/, ""); // Remove leading slash
-  return `${cleanBase}/${cleanPath}`;
+// Helper to join paths cleanly
+export function apiUrl(path: string) {
+  const cleanPath = path.replace(/^\/+/, "");
+  return `${API_BASE}/${cleanPath}`;
 }
 
 export async function apiFetch(endpoint: string, options: RequestInit = {}) {
-  const url = joinUrl(API_BASE, endpoint);
+  const url = apiUrl(endpoint);
   
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -24,15 +23,13 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
     headers,
   });
 
-  // 2. Handle Errors (404, 500, 401, etc.)
   if (!response.ok) {
     let errorMessage = `API Error: ${response.status} ${response.statusText}`;
     try {
-        // Try to parse the error message from the backend JSON
         const errorData = await response.json();
         if (errorData.message) errorMessage = errorData.message;
     } catch (e) {
-        // If JSON parse fails, stick with the status text
+        // If JSON parse fails, ignore
     }
     throw new Error(errorMessage);
   }
@@ -40,10 +37,16 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
   return response;
 }
 
-export async function postJson(endpoint: string, data: any, options: RequestInit = {}) {
+// 2. These were missing! We add them back now.
+export async function getJson<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const res = await apiFetch(endpoint, { ...options, method: 'GET' });
+  return res.json();
+}
+
+export async function postJson<T = any>(endpoint: string, data: any, options: RequestInit = {}): Promise<T> {
   const res = await apiFetch(endpoint, {
     ...options,
-    method: "POST",
+    method: 'POST',
     body: JSON.stringify(data),
   });
   return res.json();
