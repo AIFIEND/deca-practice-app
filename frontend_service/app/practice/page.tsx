@@ -77,9 +77,6 @@ function PracticePageContent() {
     // Only run if we have a session
     if (!session) return;
 
-    // Prevent running if already loading or if quiz already initiated
-    if (isLoading) return;
-
     const loadQuiz = async () => {
       setIsLoading(true);
       try {
