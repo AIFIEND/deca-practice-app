@@ -64,8 +64,10 @@ export default function StartQuizPage() {
       });
 
       router.push(`/quiz/${res.attemptId}`);
-    } catch (err) {
+} catch (err: any) {
       console.error("Failed to start quiz", err);
+      // NEW: Show the error to the user
+      alert(`Error starting quiz: ${err.message}`);
       setStarting(false);
     }
   };
