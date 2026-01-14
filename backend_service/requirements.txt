@@ -6,3 +6,5 @@ python-dotenv
 PyJWT
 pandas
 requests
+gunicorn
+psycopg2-binary
