@@ -10,7 +10,6 @@
     "import-questions": "ts-node scripts/import-questions.ts"
   },
   "dependencies": {
-    "@auth/mongodb-adapter": "^3.10.0",
     "@heroicons/react": "^2.2.0",
     "@hookform/resolvers": "^3.9.1",
     "@radix-ui/react-accordion": "1.2.2",

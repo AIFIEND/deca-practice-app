@@ -35,11 +35,6 @@ ADMIN_PASSCODE = os.environ["ADMIN_PASSCODE"]
 _frontend_origin_raw = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
 FRONTEND_ORIGINS = [o.strip() for o in _frontend_origin_raw.split(",") if o.strip()]
 
-# Support one or many origins in FRONTEND_ORIGIN, e.g.
-# FRONTEND_ORIGIN=http://localhost:3000,http://192.168.0.65:3000
-_frontend_origin_raw = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
-FRONTEND_ORIGINS = [o.strip() for o in _frontend_origin_raw.split(",") if o.strip()]
-
 CORS(
     app,
     origins=FRONTEND_ORIGINS,
@@ -252,7 +247,7 @@ def admin_required(f):
 def set_security_headers(resp):
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["X-Frame-Options"] = "DENY"
-    resp.headers["Referrer-Policy"] = "same-origin"
+    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     # Lock down some powerful features by default
     resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     return resp
@@ -395,7 +390,16 @@ def submit_quiz(current_user):
     
     attempt.results_by_category = results
 
-    attempt.score = score
+    # Calculate score server-side based on the results
+    total_correct = sum(r['correct'] for r in results.values())
+    # You can calculate percentage based on the total questions in the attempt
+    # or just the questions processed. Using attempt.total_questions is safer.
+    if attempt.total_questions > 0:
+        calculated_score = int((total_correct / attempt.total_questions) * 100)
+    else:
+        calculated_score = 0
+
+    attempt.score = calculated_score
     attempt.is_complete = True
     db.session.commit()
 
