@@ -63,7 +63,7 @@ export default function StartQuizPage() {
         headers: { "Authorization": `Bearer ${token}` } // <--- ATTACH TOKEN
       });
 
-      router.push(`/quiz/${res.attemptId}`);
+      router.push(`/practice?attemptId=${res.attemptId}`);
 } catch (err: any) {
       console.error("Failed to start quiz", err);
       // NEW: Show the error to the user
