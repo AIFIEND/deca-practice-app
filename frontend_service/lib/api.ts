@@ -1,12 +1,18 @@
 // frontend_service/lib/api.ts
-import { getSession } from "next-auth/react";
-
 // 1. Get the Backend URL from environment or default to localhost
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/+$/, "");
+const API_BASE = (
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.API_URL ||
+  "http://localhost:5000"
+).replace(/\/+$/, "");
 
 // Helper to join paths cleanly
 export function apiUrl(path: string) {
   const cleanPath = path.replace(/^\/+/, "");
+    if (API_BASE.endsWith("/api") && cleanPath.startsWith("api/")) {
+    const trimmedPath = cleanPath.replace(/^api\//, "");
+    return `${API_BASE}/${trimmedPath}`;
+  }
   return `${API_BASE}/${cleanPath}`;
 }
 
@@ -47,7 +53,10 @@ export async function postJson<T = any>(endpoint: string, data: any, options: Re
   const res = await apiFetch(endpoint, {
     ...options,
     method: 'POST',
+    
     body: JSON.stringify(data),
   });
   return res.json();
 }
+
+export { apiFetch, getJson, postJson };
